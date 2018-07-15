@@ -1,0 +1,50 @@
+#!/usr/bin/env bash
+set -eo pipefail
+IFS=$'\n\t'
+set -x
+
+get_platform () {
+    local platform="$(uname | tr '[:upper:]' '[:lower:]')"
+
+    case "$platform" in
+        linux|darwin|freebsd)
+            echo "Platform '${platform}' supported!" >&2
+            ;;
+        *)
+            echo "Platform '${platform}' not supported!" >&2
+            exit 1
+            ;;
+    esac
+
+    echo -n $platform
+}
+
+my_mktemp () {
+    local tempdir=""
+    if [ "linux" = "$1" ] ; then
+        tempdir=$(mktemp -d asdf-protoc.XXXX)
+    else
+        tempdir=$(mktemp -dt asdf-protoc.XXXX)
+    fi
+    echo -n $tempdir
+}
+
+install_protobuf () {
+    local install_type=$1
+    local version=$2
+    local install_path=$3
+    local platform=$(get_platform)
+    local tempdir=$(my_mktemp $platform)
+
+    curl -sSL "https://github.com/google/protobuf/releases/download/v${version}/protobuf-all-${version}.tar.gz" -o "${tempdir}/protobuf-all.tar.gz"
+    tar -C "${tempdir}" -xzf "${tempdir}/protobuf-all.tar.gz"
+    cd "${tempdir}/protobuf-${version}"
+    autoreconf -f -i -Wall,no-obsolete
+    ./configure --disable-debug --disable-dependency-tracking --prefix="$install_path" --with-zlib
+    make all-recursive -j$(getconf _NPROCESSORS_ONLN)
+    make install
+
+    rm -rf "${tempdir}"
+}
+
+install_protobuf $ASDF_INSTALL_TYPE $ASDF_INSTALL_VERSION $ASDF_INSTALL_PATH
